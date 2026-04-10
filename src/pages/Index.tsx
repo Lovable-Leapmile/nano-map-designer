@@ -8,7 +8,11 @@ import { MovementCommand, type MovementOrder } from "@/components/warehouse/Move
 import { useShuttleOrders } from "@/hooks/useShuttleOrders";
 import { AMRCommand, type AMROrder } from "@/components/warehouse/AMRCommand";
 import { ComponentEditor } from "@/components/warehouse/ComponentEditor";
-import { defaultComponentStyles, type ComponentStyles, type ComponentType } from "@/components/warehouse/ComponentStyles";
+import {
+  defaultComponentStyles,
+  type ComponentStyles,
+  type ComponentType,
+} from "@/components/warehouse/ComponentStyles";
 import { useProjects } from "@/hooks/useProjects";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,19 +22,34 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Save, Undo2, Move, ChevronDown, ChevronRight, Plus, Trash2, Pencil, Loader2, Warehouse, PanelLeftClose, PanelLeft } from "lucide-react";
+import {
+  Save,
+  Undo2,
+  Move,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Trash2,
+  Pencil,
+  Loader2,
+  Warehouse,
+  PanelLeftClose,
+  PanelLeft,
+} from "lucide-react";
 import { toast } from "sonner";
 
-function CollapsibleSection({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
+function CollapsibleSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="border-b border-border">
@@ -38,9 +57,7 @@ function CollapsibleSection({ title, defaultOpen = false, children }: { title: s
         <h2 className="text-sm font-semibold text-accent uppercase tracking-wider">{title}</h2>
         <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`} />
       </CollapsibleTrigger>
-      <CollapsibleContent className="px-6 pb-4">
-        {children}
-      </CollapsibleContent>
+      <CollapsibleContent className="px-6 pb-4">{children}</CollapsibleContent>
     </Collapsible>
   );
 }
@@ -95,9 +112,12 @@ export default function Index() {
   const componentStyles = activeProject?.componentStyles ?? defaultComponentStyles;
   const [savedStyles, setSavedStyles] = useState<ComponentStyles>(defaultComponentStyles);
 
-  const setComponentStyles = useCallback((styles: ComponentStyles) => {
-    updateProject(activeId, { componentStyles: styles });
-  }, [activeId, updateProject]);
+  const setComponentStyles = useCallback(
+    (styles: ComponentStyles) => {
+      updateProject(activeId, { componentStyles: styles });
+    },
+    [activeId, updateProject],
+  );
 
   const hasUnsavedChanges = JSON.stringify(componentStyles) !== JSON.stringify(savedStyles);
 
@@ -162,9 +182,12 @@ export default function Index() {
     setIsAMRAnimating(false);
   }, []);
 
-  const handleStationCountChange = useCallback((count: number) => {
-    updateProject(activeId, { params: { ...params, packingStations: count } });
-  }, [params, activeId, updateProject]);
+  const handleStationCountChange = useCallback(
+    (count: number) => {
+      updateProject(activeId, { params: { ...params, packingStations: count } });
+    },
+    [params, activeId, updateProject],
+  );
 
   const handleComponentClick = useCallback((type: ComponentType) => {
     setEditingComponent(type);
@@ -186,24 +209,30 @@ export default function Index() {
     toast.success(`Created "${name}"`);
   }, [newProjectName, projects.length, addProject]);
 
-  const handleSwitchProject = useCallback((id: string) => {
-    switchProject(id);
-    setMovementOrders([]);
-    setIsAnimating(false);
-    const proj = projects.find((p) => p.id === id);
-    if (proj) setSavedStyles(proj.componentStyles);
-  }, [switchProject, projects]);
+  const handleSwitchProject = useCallback(
+    (id: string) => {
+      switchProject(id);
+      setMovementOrders([]);
+      setIsAnimating(false);
+      const proj = projects.find((p) => p.id === id);
+      if (proj) setSavedStyles(proj.componentStyles);
+    },
+    [switchProject, projects],
+  );
 
-  const handleDeleteProject = useCallback((id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (projects.length <= 1) {
-      toast.error("Cannot delete the only project");
-      return;
-    }
-    const proj = projects.find((p) => p.id === id);
-    deleteProject(id);
-    toast.success(`Deleted "${proj?.name}"`);
-  }, [projects, deleteProject]);
+  const handleDeleteProject = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (projects.length <= 1) {
+        toast.error("Cannot delete the only project");
+        return;
+      }
+      const proj = projects.find((p) => p.id === id);
+      deleteProject(id);
+      toast.success(`Deleted "${proj?.name}"`);
+    },
+    [projects, deleteProject],
+  );
 
   const handleOpenRename = useCallback((id: string, currentName: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -246,12 +275,7 @@ export default function Index() {
               <h1 className="text-lg font-semibold text-foreground">Warehouse Viewer</h1>
               <p className="text-xs text-muted-foreground">Nano Warehouse Robot Map</p>
             </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setSidebarOpen(false)}
-              className="shrink-0"
-            >
+            <Button size="icon" variant="ghost" onClick={() => setSidebarOpen(false)} className="shrink-0">
               <PanelLeftClose className="w-4 h-4" />
             </Button>
           </div>
@@ -360,7 +384,8 @@ export default function Index() {
             </DropdownMenu>
 
             <span className="text-xs text-muted-foreground hidden lg:inline">
-              {numAisles} aisles · {params.deep}x deep · {params.slotsPerRack} levels · {totalSlots.toLocaleString()} slots
+              {numAisles} aisles · {params.deep}x deep · {params.slotsPerRack} levels · {totalSlots.toLocaleString()}{" "}
+              slots
             </span>
           </div>
 
@@ -373,28 +398,16 @@ export default function Index() {
               disabled={isAnimating}
             >
               <Move className="w-4 h-4" />
-              {moveRobotMode ? "Moving..." : "Move Robot"}
+              {moveRobotMode ? "Moving..." : "Move "}
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleUndo}
-              className="gap-1.5"
-              disabled={!hasUnsavedChanges}
-            >
+            <Button size="sm" variant="outline" onClick={handleUndo} className="gap-1.5" disabled={!hasUnsavedChanges}>
               <Undo2 className="w-4 h-4" />
               Undo
             </Button>
-            <Button
-              size="sm"
-              onClick={handleSave}
-              className="gap-1.5"
-              disabled={!hasUnsavedChanges}
-            >
+            <Button size="sm" onClick={handleSave} className="gap-1.5" disabled={!hasUnsavedChanges}>
               <Save className="w-4 h-4" />
               Save
             </Button>
-
           </div>
         </div>
 
@@ -440,7 +453,9 @@ export default function Index() {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewProjectOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setNewProjectOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={handleCreateProject}>Create</Button>
           </DialogFooter>
         </DialogContent>
@@ -461,7 +476,9 @@ export default function Index() {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setRenameOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={handleRename}>Rename</Button>
           </DialogFooter>
         </DialogContent>
