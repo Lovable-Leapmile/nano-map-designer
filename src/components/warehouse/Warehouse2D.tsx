@@ -767,6 +767,16 @@ export function Warehouse2D({
     ctx.scale(transform.scale, transform.scale);
     ctx.rotate(transform.rotation);
 
+    const rot = transform.rotation;
+    // Helper: draw text that stays human-readable regardless of canvas rotation
+    const drawReadableText = (text: string, x: number, y: number, extraRotation = 0) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-rot + extraRotation);
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+    };
+
     const padding = 60;
 
     // Stations config - vertical column parallel to AMR path
