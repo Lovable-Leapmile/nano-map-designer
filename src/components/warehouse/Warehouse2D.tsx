@@ -768,11 +768,16 @@ export function Warehouse2D({
     ctx.rotate(transform.rotation);
 
     const rot = transform.rotation;
-    // Helper: draw text that stays human-readable regardless of canvas rotation
+    // Normalize angle to [0, 2π)
+    const normRot = ((rot % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    // If the canvas is rotated so text would be upside-down, flip 180°
+    const textFlip = (normRot > Math.PI / 2 && normRot < 3 * Math.PI / 2) ? Math.PI : 0;
+
+    // Helper: draw text that flips 180° when warehouse is upside-down
     const drawReadableText = (text: string, x: number, y: number, extraRotation = 0) => {
       ctx.save();
       ctx.translate(x, y);
-      ctx.rotate(-rot + extraRotation);
+      ctx.rotate(textFlip + extraRotation);
       ctx.fillText(text, 0, 0);
       ctx.restore();
     };
