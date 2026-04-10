@@ -889,12 +889,12 @@ export function Warehouse2D({
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     for (let gx = 0; gx <= params.length; gx += 2) {
-      ctx.fillText(`${gx}`, siteX + gx * ppm, siteY - 12);
+      drawReadableText(`${gx}`, siteX + gx * ppm, siteY - 12);
     }
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     for (let gy = 0; gy <= params.width; gy += 2) {
-      ctx.fillText(`${gy}`, siteX - 5, siteY + gy * ppm);
+      drawReadableText(`${gy}`, siteX - 5, siteY + gy * ppm);
     }
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
@@ -910,12 +910,8 @@ export function Warehouse2D({
     ctx.fillStyle = "hsl(170, 70%, 50%)";
     ctx.font = "12px monospace";
     ctx.textAlign = "center";
-    ctx.fillText(`${params.length}m`, siteX + siteW / 2, siteY + siteH + 20);
-    ctx.save();
-    ctx.translate(siteX - 25, siteY + siteH / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText(`${params.width}m`, 0, 0);
-    ctx.restore();
+    drawReadableText(`${params.length}m`, siteX + siteW / 2, siteY + siteH + 20);
+    drawReadableText(`${params.width}m`, siteX - 25, siteY + siteH / 2, -Math.PI / 2);
 
     const layoutW = contentW * ppm;
     const layoutH = contentH * ppm;
@@ -1095,15 +1091,11 @@ export function Warehouse2D({
     }
 
     // "Packing Area" label (vertical)
-    ctx.save();
     ctx.font = "bold 11px monospace";
     ctx.fillStyle = "hsl(270, 50%, 65%)";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.translate(stationsX - 12, stationsStartY + totalStationsH / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText("Packing Area", 0, 0);
-    ctx.restore();
+    drawReadableText("Packing Area", stationsX - 12, stationsStartY + totalStationsH / 2, -Math.PI / 2);
 
     // ====== Single Delivery Station at top near x=5m, y=2m ======
     const deliveryWPx = deliveryW_m * ppm;
@@ -1178,13 +1170,11 @@ export function Warehouse2D({
     }
 
     // "Delivery Area" label
-    ctx.save();
     ctx.font = "bold 11px monospace";
     ctx.fillStyle = "hsl(160, 50%, 65%)";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    ctx.fillText("Delivery Area", deliveryCenterX, deliveryDy - 8);
-    ctx.restore();
+    drawReadableText("Delivery Area", deliveryCenterX, deliveryDy - 8);
 
     // ====== AGV Parking Area: right side, vertical column of parking spots ======
     const parkingSpotWPx = PARKING_SPOT_W_M * ppm;
@@ -1261,15 +1251,11 @@ export function Warehouse2D({
     }
 
     // "AGV Parking" label (vertical, right of parking)
-    ctx.save();
     ctx.font = "bold 10px monospace";
     ctx.fillStyle = "hsl(30, 60%, 65%)";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.translate(parkingX + parkingSpotWPx + 14, parkingStartY + totalParkingH / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText("AGV Parking", 0, 0);
-    ctx.restore();
+    drawReadableText("AGV Parking", parkingX + parkingSpotWPx + 14, parkingStartY + totalParkingH / 2, -Math.PI / 2);
 
     let currentY = startY;
 
