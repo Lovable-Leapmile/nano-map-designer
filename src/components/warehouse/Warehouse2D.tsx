@@ -421,167 +421,218 @@ export function Warehouse2D({
     amrLoopRunning.current = true;
     amrLastTimeRef.current = performance.now();
 
-    const MIN_GAP = 0.4; // minimum 0.1m gap between AGVs
-    const STOP_DIST = MIN_GAP + 0.15; // start braking at this distance
-    const LANE_SWITCH_WAIT = 0.5; // seconds before attempting lane switch
-
     const loop = () => {
       const now = performance.now();
       const delta = Math.min((now - amrLastTimeRef.current) / 1000, 0.05);
       amrLastTimeRef.current = now;
 
-      const AMR_SPEED = 0.5; // 0.5 m/s
+      const AMR_SPEED = 0.5;
       const PICKUP_DURATION = 0.8;
       const DROPOFF_DURATION = 0.8;
 
-      // Collect positions + stopped state for collision checking
+      const MIN_GAP = 0.4;
+      const STOP_DIST = MIN_GAP + 0.15;
+      const LANE_SWITCH_WAIT = 0.5;
+      const BRANCH_YIELD_WAIT = 0.3;
+
+      // Collect positions for collision checking
       const positions: { id: number; mx: number; my: number; stopped: boolean; active: boolean }[] = [];
       amrAnimMapRef.current.forEach((st, id) => {
         const active = st.phase !== "idle" && st.phase !== "done";
         positions.push({ id, mx: st.mx, my: st.my, stopped: st.stopped, active });
       });
 
-      // Check if AGV should stop: returns true if ANY other AGV is too close ahead
-      // (including stopped AGVs). BOTH AGVs in a conflict pair stop.
-      const checkBlocked = (
-        agvId: number,
-        mx: number,
-        my: number,
-        targetMX: number,
-        targetMY: number,
-      ): { blocked: boolean; shouldSwitch: boolean } => {
-        const dx = targetMX - mx;
-        const dy = targetMY - my;
-        const moveDist = Math.sqrt(dx * dx + dy * dy);
-        if (moveDist < 0.001) return { blocked: false, shouldSwitch: false };
+    // Check if AGV should stop
+    const checkBlocked = (
+      agvId: number,
+      mx: number,
+      my: number,
+      targetMX: number,
+      targetMY: number,
+      phase: AMRPhase,
+    ): { blocked: boolean; shouldSwitch: boolean; shouldYield: boolean; blockerId: number } => {
+      const dx = targetMX - mx;
+      const dy = targetMY - my;
+      const moveDist = Math.sqrt(dx * dx + dy * dy);
+      if (moveDist < 0.001) return { blocked: false, shouldSwitch: false, shouldYield: false, blockerId: -1 };
 
-        const ndx = dx / moveDist;
-        const ndy = dy / moveDist;
-        const laneThreshold = LANE_GAP_M * 0.5;
+      const ndx = dx / moveDist;
+      const ndy = dy / moveDist;
+      const laneThreshold = LANE_GAP_M * 0.6;
 
-        let blocked = false;
-        let shouldSwitch = false;
+      let blocked = false;
+      let shouldSwitch = false;
+      let shouldYield = false;
+      let blockerId = -1;
 
-        for (const other of positions) {
-          if (other.id === agvId) continue;
-          const odx = other.mx - mx;
-          const ody = other.my - my;
-          const eucDist = Math.sqrt(odx * odx + ody * ody);
+      for (const other of positions) {
+        if (other.id === agvId) continue;
+        const odx = other.mx - mx;
+        const ody = other.my - my;
+        const eucDist = Math.sqrt(odx * odx + ody * ody);
+        const fwdDist = odx * ndx + ody * ndy;
+        const perpDist = Math.abs(odx * -ndy + ody * ndx);
 
-          // Forward distance along movement direction
-          const fwdDist = odx * ndx + ody * ndy;
-          // Perpendicular distance
-          const perpDist = Math.abs(odx * -ndy + ody * ndx);
+        // Same lane, ahead, too close
+        if (perpDist < laneThreshold && fwdDist > 0 && eucDist < STOP_DIST) {
+          blocked = true;
+          blockerId = other.id;
 
-          // Stop if on same lane AND ahead AND too close
-          if (perpDist < laneThreshold && fwdDist > 0 && eucDist < STOP_DIST) {
-            blocked = true;
-            // Higher ID should attempt lane switch; lower ID just waits
-            if (agvId > other.id) shouldSwitch = true;
-          }
+          // Check if this is a head-on collision (other AGV moving toward us)
+          const otherSt = amrAnimMapRef.current.get(other.id);
+          if (otherSt) {
+            const otherPhase = otherSt.phase;
 
-          // Also stop if ANY AGV (including stopped ones on adjacent lane) is within MIN_GAP
-          if (eucDist < MIN_GAP && eucDist > 0.001 && fwdDist > 0) {
-            blocked = true;
-          }
-        }
-        return { blocked, shouldSwitch };
-      };
+            // Check if they're moving toward each other (head-on)
+            let otherTarget: { mx: number; my: number } | null = null;
+            if (otherPhase === "to_source" && otherSt.sourceWaypoints[otherSt.sourceWpIdx]) {
+              otherTarget = otherSt.sourceWaypoints[otherSt.sourceWpIdx];
+            } else if (otherPhase === "to_station" && otherSt.stationWaypoints[otherSt.stationWpIdx]) {
+              otherTarget = otherSt.stationWaypoints[otherSt.stationWpIdx];
+            } else if (otherPhase === "return_to_idle" && otherSt.returnWaypoints[otherSt.returnWpIdx]) {
+              otherTarget = otherSt.returnWaypoints[otherSt.returnWpIdx];
+            }
 
-      // Check if a point on the adjacent lane is free from ALL AGVs
-      const isLanePointFree = (agvId: number, mx: number, my: number): boolean => {
-        for (const other of positions) {
-          if (other.id === agvId) continue;
-          const d = Math.sqrt((other.mx - mx) ** 2 + (other.my - my) ** 2);
-          if (d < STOP_DIST) return false;
-        }
-        return true;
-      };
-
-      // Move AGV along waypoints with collision avoidance and rotation
-      const moveAlongWaypoints = (
-        st: AMRAnimState,
-        agvId: number,
-        waypoints: { mx: number; my: number }[],
-        wpIdx: number,
-        dt: number,
-      ): { arrived: boolean; newIdx: number } => {
-        const target = waypoints[wpIdx];
-        if (!target) return { arrived: true, newIdx: wpIdx };
-
-        const dx = target.mx - st.mx;
-        const dy = target.my - st.my;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        // Smooth heading angle rotation
-        if (dist > 0.001) {
-          const targetAngle = Math.atan2(dy, dx);
-          let angleDiff = targetAngle - st.angle;
-          while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-          while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-          st.angle += angleDiff * Math.min(1, dt * 8);
-        }
-
-        // Collision check — both AGVs stop, only higher-ID tries lane switch
-        const { blocked, shouldSwitch } = checkBlocked(agvId, st.mx, st.my, target.mx, target.my);
-
-        if (blocked) {
-          st.stopped = true;
-          st.stoppedTimer += dt;
-
-          // Only the higher-ID AGV attempts lane switching after waiting
-          if (shouldSwitch && st.stoppedTimer > LANE_SWITCH_WAIT) {
-            const isHoriz = Math.abs(dx) > Math.abs(dy);
-            // Shift exactly one lane gap to the adjacent lane line
-            const laneGap = LANE_GAP_M;
-
-            for (const sign of [1, -1]) {
-              // Adjacent lane point: shift perpendicular by exactly lane gap
-              const adjMX = st.mx + (isHoriz ? 0 : sign * laneGap);
-              const adjMY = st.my + (isHoriz ? sign * laneGap : 0);
-
-              // Pass distance along the path to clear the blocker
-              const passDist = STOP_DIST * 4;
-              const fwdX = isHoriz ? Math.sign(dx) * passDist : 0;
-              const fwdY = isHoriz ? 0 : Math.sign(dy) * passDist;
-
-              if (isLanePointFree(agvId, adjMX, adjMY) && isLanePointFree(agvId, adjMX + fwdX, adjMY + fwdY)) {
-                // Strict right-angle detour on AMR lanes:
-                // 1. Move perpendicular to adjacent lane
-                // 2. Move forward past blocker on adjacent lane
-                // 3. Move perpendicular back to original lane
-                const detour = [
-                  { mx: adjMX, my: adjMY },
-                  { mx: adjMX + fwdX, my: adjMY + fwdY },
-                  { mx: st.mx + fwdX, my: st.my + fwdY },
-                ];
-                waypoints.splice(wpIdx, 0, ...detour);
-
-                st.stopped = false;
-                st.stoppedTimer = 0;
-                break;
+            if (otherTarget) {
+              const otherDx = otherTarget.mx - other.mx;
+              const otherDy = otherTarget.my - other.my;
+              const otherMoveDist = Math.sqrt(otherDx * otherDx + otherDy * otherDy);
+              if (otherMoveDist > 0.001) {
+                const otherNdx = otherDx / otherMoveDist;
+                const otherNdy = otherDy / otherMoveDist;
+                // Dot product of directions: negative means head-on
+                const dotProduct = ndx * otherNdx + ndy * otherNdy;
+                if (dotProduct < -0.5) {
+                  // Head-on collision — higher ID yields (backs up)
+                  if (agvId > other.id) {
+                    shouldYield = true;
+                  }
+                  continue; // Don't also set shouldSwitch
+                }
               }
             }
-            // If neither lane is free, keep waiting
+          }
+
+          // Same direction: higher ID does lane switch
+          if (agvId > other.id) shouldSwitch = true;
+        }
+
+        // Very close ahead on any lane
+        if (eucDist < MIN_GAP && eucDist > 0.001 && fwdDist > 0) {
+          blocked = true;
+          if (blockerId === -1) blockerId = other.id;
+        }
+      }
+      return { blocked, shouldSwitch, shouldYield, blockerId };
+    };
+
+    const isLanePointFree = (agvId: number, mx: number, my: number): boolean => {
+      for (const other of positions) {
+        if (other.id === agvId) continue;
+        const d = Math.sqrt((other.mx - mx) ** 2 + (other.my - my) ** 2);
+        if (d < STOP_DIST) return false;
+      }
+      return true;
+    };
+
+    // Move AGV along waypoints with collision avoidance, lane switching, and yielding
+    const moveAlongWaypoints = (
+      st: AMRAnimState,
+      agvId: number,
+      waypoints: { mx: number; my: number }[],
+      wpIdx: number,
+      dt: number,
+    ): { arrived: boolean; newIdx: number } => {
+      const target = waypoints[wpIdx];
+      if (!target) return { arrived: true, newIdx: wpIdx };
+
+      const dx = target.mx - st.mx;
+      const dy = target.my - st.my;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Smooth heading angle rotation
+      if (dist > 0.001) {
+        const targetAngle = Math.atan2(dy, dx);
+        let angleDiff = targetAngle - st.angle;
+        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+        st.angle += angleDiff * Math.min(1, dt * 8);
+      }
+
+      const { blocked, shouldSwitch, shouldYield, blockerId } = checkBlocked(
+        agvId, st.mx, st.my, target.mx, target.my, st.phase,
+      );
+
+      if (blocked) {
+        st.stopped = true;
+        st.stoppedTimer += dt;
+
+        // HEAD-ON YIELD: back up by reversing waypoints to previous waypoint
+        if (shouldYield && st.stoppedTimer > BRANCH_YIELD_WAIT) {
+          // Insert a waypoint to back up to the previous waypoint position
+          const prevWp = wpIdx > 0 ? waypoints[wpIdx - 1] : null;
+          if (prevWp) {
+            // Back up to previous waypoint, then re-approach after blocker passes
+            const backupWps = [
+              { mx: prevWp.mx, my: prevWp.my },
+            ];
+            // Insert backup waypoints before current target
+            waypoints.splice(wpIdx, 0, ...backupWps);
+            st.stopped = false;
+            st.stoppedTimer = 0;
           }
           return { arrived: false, newIdx: wpIdx };
         }
 
-        // Not blocked — clear stop state and move
-        st.stopped = false;
-        st.stoppedTimer = 0;
+        // LANE SWITCH: higher-ID AGV creates a detour on adjacent lane
+        if (shouldSwitch && !shouldYield && st.stoppedTimer > LANE_SWITCH_WAIT) {
+          const isHoriz = Math.abs(dx) > Math.abs(dy);
+          const laneGap = LANE_GAP_M;
 
-        if (dist < 0.01) {
-          st.mx = target.mx;
-          st.my = target.my;
-          return { arrived: false, newIdx: wpIdx + 1 };
+          for (const sign of [1, -1]) {
+            const adjMX = st.mx + (isHoriz ? 0 : sign * laneGap);
+            const adjMY = st.my + (isHoriz ? sign * laneGap : 0);
+
+            const passDist = STOP_DIST * 4;
+            const fwdX = isHoriz ? Math.sign(dx) * passDist : 0;
+            const fwdY = isHoriz ? 0 : Math.sign(dy) * passDist;
+
+            if (isLanePointFree(agvId, adjMX, adjMY) &&
+                isLanePointFree(agvId, adjMX + fwdX, adjMY + fwdY)) {
+              // Right-angle detour: perpendicular → forward past blocker → perpendicular back
+              const detour = [
+                { mx: adjMX, my: adjMY },
+                { mx: adjMX + fwdX, my: adjMY + fwdY },
+                { mx: st.mx + fwdX, my: st.my + fwdY },
+              ];
+              waypoints.splice(wpIdx, 0, ...detour);
+
+              st.stopped = false;
+              st.stoppedTimer = 0;
+              break;
+            }
+          }
+          return { arrived: false, newIdx: wpIdx };
         }
 
-        const step = AMR_SPEED * dt;
-        st.mx += (dx / dist) * Math.min(step, dist);
-        st.my += (dy / dist) * Math.min(step, dist);
         return { arrived: false, newIdx: wpIdx };
-      };
+      }
+
+      // Not blocked — clear stop state and move
+      st.stopped = false;
+      st.stoppedTimer = 0;
+
+      if (dist < 0.01) {
+        st.mx = target.mx;
+        st.my = target.my;
+        return { arrived: false, newIdx: wpIdx + 1 };
+      }
+
+      const step = AMR_SPEED * dt;
+      st.mx += (dx / dist) * Math.min(step, dist);
+      st.my += (dy / dist) * Math.min(step, dist);
+      return { arrived: false, newIdx: wpIdx };
+    };
 
       let anyActive = false;
       amrAnimMapRef.current.forEach((st, agvId) => {
