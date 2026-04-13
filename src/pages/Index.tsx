@@ -286,32 +286,17 @@ export default function Index() {
           <WarehouseConfig params={params} loading={storeLoading} error={storeError} headless />
         </CollapsibleSection>
 
-        {/* Collapsible: Shuttle Movement */}
-        <CollapsibleSection title="Shuttle Movement">
-          <MovementCommand
+        {/* Collapsible: Movement */}
+        <CollapsibleSection title="Movement" defaultOpen>
+          <CombinedMovementCommand
             params={params}
-            onExecute={handleExecuteMovement}
-            onExecuteBatch={handleExecuteMovementBatch}
-            isAnimating={isAnimating}
-            onReset={handleReset}
-            shuttleOrders={shuttleOrders}
-            shuttleOrdersLoading={shuttleOrdersLoading}
-            onRefetchShuttleOrders={refetchShuttleOrders}
-          />
-        </CollapsibleSection>
-
-        {/* Collapsible: AMR Movement */}
-        <CollapsibleSection title="AMR Movement">
-          <AMRCommand
-            params={params}
-            onExecute={handleExecuteAMR}
-            onExecuteBatch={handleExecuteAMRBatch}
-            isAnimating={isAMRAnimating}
-            onReset={handleAMRReset}
+            orders={combinedOrders}
+            ordersLoading={combinedOrdersLoading}
+            onRefetchOrders={refetchCombinedOrders}
+            onExecute={handleCombinedExecute}
+            onReset={handleCombinedReset}
             onStationCountChange={handleStationCountChange}
-            orders={agvOrders}
-            ordersLoading={ordersLoading}
-            onRefetchOrders={refetchOrders}
+            onAgvSelectionChange={(orderId, count) => setActiveAgvCounts((prev) => ({ ...prev, [orderId]: count }))}
           />
         </CollapsibleSection>
 
