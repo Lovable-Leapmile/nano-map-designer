@@ -376,13 +376,13 @@ export default function Index() {
             params={params}
             movementOrders={movementOrders}
             movementOrdersKey={movementOrdersKey}
-            onAnimationComplete={handleAnimationComplete}
+            onAnimationComplete={() => setIsAnimating(false)}
             componentStyles={componentStyles}
             onComponentClick={handleComponentClick}
             moveRobotMode={moveRobotMode}
             amrOrders={amrOrders}
             amrOrdersKey={amrOrdersKey}
-            onAMRComplete={handleAMRComplete}
+            onAMRComplete={() => setIsAMRAnimating(false)}
             agvs={agvs}
           />
         </div>
