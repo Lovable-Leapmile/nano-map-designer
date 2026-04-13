@@ -2,11 +2,11 @@ import { useState, useCallback } from "react";
 import { WarehouseConfig, StatCard, type WarehouseParams } from "@/components/warehouse/WarehouseConfig";
 import { useStoreParams } from "@/hooks/useStoreParams";
 import { useAGVs } from "@/hooks/useAGVs";
-import { useAGVOrders } from "@/hooks/useAGVOrders";
+import { useOrders } from "@/hooks/useOrders";
 import { Warehouse2D } from "@/components/warehouse/Warehouse2D";
-import { MovementCommand, type MovementOrder } from "@/components/warehouse/MovementCommand";
-import { useShuttleOrders } from "@/hooks/useShuttleOrders";
-import { AMRCommand, type AMROrder } from "@/components/warehouse/AMRCommand";
+import { type MovementOrder } from "@/components/warehouse/MovementCommand";
+import { CombinedMovementCommand, type CombinedExecutionPayload } from "@/components/warehouse/CombinedMovementCommand";
+import type { AMROrder } from "@/components/warehouse/AMRCommand";
 import { ComponentEditor } from "@/components/warehouse/ComponentEditor";
 import {
   defaultComponentStyles,
@@ -81,7 +81,7 @@ export default function Index() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingComponent, setEditingComponent] = useState<ComponentType | null>(null);
   const [moveRobotMode, setMoveRobotMode] = useState(false);
-  const [amrOrder, setAmrOrder] = useState<AMROrder | null>(null);
+  const [_amrOrder, _setAmrOrder] = useState<AMROrder | null>(null);
   const [amrOrders, setAmrOrders] = useState<AMROrder[]>([]);
   const [amrOrdersKey, setAmrOrdersKey] = useState(0);
   const [isAMRAnimating, setIsAMRAnimating] = useState(false);
@@ -99,8 +99,8 @@ export default function Index() {
   // Derived from active project — safe defaults when loading
   const { params: storeParams, loading: storeLoading, error: storeError } = useStoreParams();
   const { agvs } = useAGVs();
-  const { orders: agvOrders, loading: ordersLoading, refetch: refetchOrders } = useAGVOrders();
-  const { orders: shuttleOrders, loading: shuttleOrdersLoading, refetch: refetchShuttleOrders } = useShuttleOrders();
+  const { orders: combinedOrders, loading: combinedOrdersLoading, refetch: refetchCombinedOrders } = useOrders();
+  const [activeAgvCounts, setActiveAgvCounts] = useState<Record<number, number>>({});
 
   // Merge store params with packing station settings from project
   const params: WarehouseParams = {
@@ -134,50 +134,24 @@ export default function Index() {
   const numAisles = Math.max(1, Math.floor(params.rows / 2));
   const totalSlots = params.rows * params.racks * params.slotsPerRack * params.deep;
 
-  const handleExecuteMovement = useCallback((order: MovementOrder) => {
-    setMovementOrders([order]);
-    setMovementOrdersKey((k) => k + 1);
-    setIsAnimating(true);
+  const handleCombinedExecute = useCallback((payload: CombinedExecutionPayload) => {
+    // Dispatch shuttle orders
+    if (payload.shuttleOrders.length > 0) {
+      setMovementOrders(payload.shuttleOrders);
+      setMovementOrdersKey((k) => k + 1);
+      setIsAnimating(true);
+    }
+    // Dispatch AMR orders
+    if (payload.amrOrders.length > 0) {
+      setAmrOrders(payload.amrOrders.map((o) => ({ ...o })));
+      setAmrOrdersKey((k) => k + 1);
+      setIsAMRAnimating(true);
+    }
   }, []);
 
-  const handleExecuteMovementBatch = useCallback((orders: MovementOrder[]) => {
-    if (orders.length === 0) return;
-    setMovementOrders(orders);
-    setMovementOrdersKey((k) => k + 1);
-    setIsAnimating(true);
-  }, []);
-
-  const handleAnimationComplete = useCallback(() => {
-    setIsAnimating(false);
-  }, []);
-
-  const handleReset = useCallback(() => {
+  const handleCombinedReset = useCallback(() => {
     setMovementOrders([]);
     setIsAnimating(false);
-  }, []);
-
-  const handleExecuteAMR = useCallback((order: AMROrder) => {
-    const nextOrder = { ...order };
-    setAmrOrder(nextOrder);
-    setAmrOrders([nextOrder]);
-    setAmrOrdersKey((k) => k + 1);
-    setIsAMRAnimating(true);
-  }, []);
-
-  const handleExecuteAMRBatch = useCallback((orders: AMROrder[]) => {
-    if (orders.length === 0) return;
-    setAmrOrder({ ...orders[0] });
-    setAmrOrders(orders.map((order) => ({ ...order })));
-    setAmrOrdersKey((k) => k + 1);
-    setIsAMRAnimating(true);
-  }, []);
-
-  const handleAMRComplete = useCallback(() => {
-    setIsAMRAnimating(false);
-  }, []);
-
-  const handleAMRReset = useCallback(() => {
-    setAmrOrder(null);
     setAmrOrders([]);
     setIsAMRAnimating(false);
   }, []);
@@ -286,32 +260,17 @@ export default function Index() {
           <WarehouseConfig params={params} loading={storeLoading} error={storeError} headless />
         </CollapsibleSection>
 
-        {/* Collapsible: Shuttle Movement */}
-        <CollapsibleSection title="Shuttle Movement">
-          <MovementCommand
+        {/* Collapsible: Movement */}
+        <CollapsibleSection title="Movement" defaultOpen>
+          <CombinedMovementCommand
             params={params}
-            onExecute={handleExecuteMovement}
-            onExecuteBatch={handleExecuteMovementBatch}
-            isAnimating={isAnimating}
-            onReset={handleReset}
-            shuttleOrders={shuttleOrders}
-            shuttleOrdersLoading={shuttleOrdersLoading}
-            onRefetchShuttleOrders={refetchShuttleOrders}
-          />
-        </CollapsibleSection>
-
-        {/* Collapsible: AMR Movement */}
-        <CollapsibleSection title="AMR Movement">
-          <AMRCommand
-            params={params}
-            onExecute={handleExecuteAMR}
-            onExecuteBatch={handleExecuteAMRBatch}
-            isAnimating={isAMRAnimating}
-            onReset={handleAMRReset}
+            orders={combinedOrders}
+            ordersLoading={combinedOrdersLoading}
+            onRefetchOrders={refetchCombinedOrders}
+            onExecute={handleCombinedExecute}
+            onReset={handleCombinedReset}
             onStationCountChange={handleStationCountChange}
-            orders={agvOrders}
-            ordersLoading={ordersLoading}
-            onRefetchOrders={refetchOrders}
+            onAgvSelectionChange={(orderId, count) => setActiveAgvCounts((prev) => ({ ...prev, [orderId]: count }))}
           />
         </CollapsibleSection>
 
@@ -417,13 +376,13 @@ export default function Index() {
             params={params}
             movementOrders={movementOrders}
             movementOrdersKey={movementOrdersKey}
-            onAnimationComplete={handleAnimationComplete}
+            onAnimationComplete={() => setIsAnimating(false)}
             componentStyles={componentStyles}
             onComponentClick={handleComponentClick}
             moveRobotMode={moveRobotMode}
             amrOrders={amrOrders}
             amrOrdersKey={amrOrdersKey}
-            onAMRComplete={handleAMRComplete}
+            onAMRComplete={() => setIsAMRAnimating(false)}
             agvs={agvs}
           />
         </div>
