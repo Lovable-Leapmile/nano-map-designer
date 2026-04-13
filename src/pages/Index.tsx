@@ -134,50 +134,24 @@ export default function Index() {
   const numAisles = Math.max(1, Math.floor(params.rows / 2));
   const totalSlots = params.rows * params.racks * params.slotsPerRack * params.deep;
 
-  const handleExecuteMovement = useCallback((order: MovementOrder) => {
-    setMovementOrders([order]);
-    setMovementOrdersKey((k) => k + 1);
-    setIsAnimating(true);
+  const handleCombinedExecute = useCallback((payload: CombinedExecutionPayload) => {
+    // Dispatch shuttle orders
+    if (payload.shuttleOrders.length > 0) {
+      setMovementOrders(payload.shuttleOrders);
+      setMovementOrdersKey((k) => k + 1);
+      setIsAnimating(true);
+    }
+    // Dispatch AMR orders
+    if (payload.amrOrders.length > 0) {
+      setAmrOrders(payload.amrOrders.map((o) => ({ ...o })));
+      setAmrOrdersKey((k) => k + 1);
+      setIsAMRAnimating(true);
+    }
   }, []);
 
-  const handleExecuteMovementBatch = useCallback((orders: MovementOrder[]) => {
-    if (orders.length === 0) return;
-    setMovementOrders(orders);
-    setMovementOrdersKey((k) => k + 1);
-    setIsAnimating(true);
-  }, []);
-
-  const handleAnimationComplete = useCallback(() => {
-    setIsAnimating(false);
-  }, []);
-
-  const handleReset = useCallback(() => {
+  const handleCombinedReset = useCallback(() => {
     setMovementOrders([]);
     setIsAnimating(false);
-  }, []);
-
-  const handleExecuteAMR = useCallback((order: AMROrder) => {
-    const nextOrder = { ...order };
-    setAmrOrder(nextOrder);
-    setAmrOrders([nextOrder]);
-    setAmrOrdersKey((k) => k + 1);
-    setIsAMRAnimating(true);
-  }, []);
-
-  const handleExecuteAMRBatch = useCallback((orders: AMROrder[]) => {
-    if (orders.length === 0) return;
-    setAmrOrder({ ...orders[0] });
-    setAmrOrders(orders.map((order) => ({ ...order })));
-    setAmrOrdersKey((k) => k + 1);
-    setIsAMRAnimating(true);
-  }, []);
-
-  const handleAMRComplete = useCallback(() => {
-    setIsAMRAnimating(false);
-  }, []);
-
-  const handleAMRReset = useCallback(() => {
-    setAmrOrder(null);
     setAmrOrders([]);
     setIsAMRAnimating(false);
   }, []);
